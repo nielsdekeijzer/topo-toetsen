@@ -37,11 +37,16 @@
   #start-screen {
     position: absolute; inset: 0; z-index: 2000; background: rgba(30,58,95,.93);
     color: #fff; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 14px; text-align: center; padding: 20px;
+    justify-content: safe center; gap: 14px; text-align: center; padding: 20px; overflow-y: auto;
   }
   #start-screen h2 { margin: 0; font-size: 26px; }
   #start-screen p { max-width: 460px; margin: 0; line-height: 1.5; }
   #start-screen button { font-size: 18px; padding: 14px 24px; }
+  #start-screen .back-link {
+    position: absolute; top: 16px; left: 16px;
+    color: #fff; text-decoration: none; font-size: 10px; font-weight: 600;
+    background: rgba(255,255,255,.15); padding: 7px 12px; border-radius: 8px;
+  }
   .hidden { display: none !important; }
   .muted { color: #6b7280; font-size: 14px; margin-top: 6px; }
   .difficulty { margin-top: 2px; opacity: .8; }
@@ -122,6 +127,7 @@
 </div>
 
 <div id="start-screen">
+  <a class="back-link" href="index.html">← Alle toetsen</a>
   <h2>🗺️ Topografie-overhoring Australië & Oceanië</h2>
   <p>17 plaatsen, landen, eilanden en wateren. Kies hoe je overhoord wilt worden:</p>
   <button class="btn-primary" id="btnModeA" style="background:#c2410c">A&nbsp;·&nbsp;Hoe heet dit? <br><small>er wordt iets gemarkeerd, jij zegt de naam</small></button>
