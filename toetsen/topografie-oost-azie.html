@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Topografie Oost-Azië — Overhoren</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header {
+    background: #1e3a5f; color: #fff; padding: 10px 16px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 18px; margin: 0; flex: 1; min-width: 200px; }
+  .score { font-size: 15px; background: rgba(255,255,255,.15); padding: 6px 12px; border-radius: 8px; }
+  #map { flex: 1; min-height: 300px; }
+  #panel {
+    background: #fff; border-top: 2px solid #1e3a5f; padding: 14px 16px;
+    min-height: 110px; text-align: center;
+  }
+  .question { font-size: 20px; font-weight: 600; margin-bottom: 10px; }
+  .question .target { color: #c2410c; }
+  button {
+    font-size: 16px; padding: 10px 18px; margin: 4px 6px; border: none;
+    border-radius: 10px; cursor: pointer; font-weight: 600;
+  }
+  button:active { transform: scale(.97); }
+  .btn-primary { background: #1e3a5f; color: #fff; }
+  .btn-good { background: #16a34a; color: #fff; }
+  .btn-bad { background: #dc2626; color: #fff; }
+  .btn-neutral { background: #e5e7eb; color: #111; }
+  .feedback { font-size: 18px; font-weight: 700; margin: 8px 0; }
+  .feedback.good { color: #16a34a; }
+  .feedback.bad { color: #dc2626; }
+  #start-screen {
+    position: absolute; inset: 0; z-index: 2000; background: rgba(30,58,95,.93);
+    color: #fff; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; text-align: center; padding: 20px;
+  }
+  #start-screen h2 { margin: 0; font-size: 26px; }
+  #start-screen p { max-width: 460px; margin: 0; line-height: 1.5; }
+  #start-screen button { font-size: 18px; padding: 14px 24px; }
+  .hidden { display: none !important; }
+  .muted { color: #6b7280; font-size: 14px; margin-top: 6px; }
+  .difficulty { margin-top: 2px; opacity: .8; }
+  .diff-label { display: block; font-size: 10px; opacity: .6; margin-bottom: 3px; }
+  .diff-toggle { display: inline-flex; background: rgba(255,255,255,.10); border-radius: 6px; padding: 2px; }
+  #start-screen .diff-toggle button {
+    font-size: 10px; font-weight: 500; padding: 3px 7px; margin: 0;
+    background: transparent; color: rgba(255,255,255,.7); border-radius: 4px;
+  }
+  #start-screen .diff-toggle button.active { background: #fff; color: #1e3a5f; font-weight: 700; }
+
+  /* 🎉 feestmoment */
+  #party {
+    position: fixed; inset: 0; z-index: 4000; overflow: hidden;
+    background: rgba(17, 24, 39, .82);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #confettiCanvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .party-inner { position: relative; text-align: center; color: #fff; padding: 20px; }
+  .party-title {
+    font-size: clamp(34px, 8vw, 72px); font-weight: 900; letter-spacing: 2px;
+    background: linear-gradient(90deg, #f472b6, #facc15, #4ade80, #38bdf8, #a78bfa, #f472b6);
+    background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: rainbow 2.5s linear infinite, pulse 1s ease-in-out infinite;
+  }
+  .party-sub { font-size: clamp(18px, 4vw, 28px); font-weight: 700; margin-top: 8px; animation: pulse 1s ease-in-out infinite .3s; }
+  .dancers { font-size: clamp(36px, 7vw, 64px); margin: 24px 0; }
+  .dancers span { display: inline-block; animation: dance .6s ease-in-out infinite alternate; }
+  .dancers span:nth-child(odd)  { animation-name: dance2; animation-duration: .5s; }
+  .dancers span:nth-child(3n)   { animation-duration: .7s; }
+  #party .btn-primary { font-size: 20px; padding: 14px 28px; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes dance  { from { transform: translateY(0) rotate(-14deg) scale(1); } to { transform: translateY(-26px) rotate(14deg) scale(1.18); } }
+  @keyframes dance2 { from { transform: translateY(-20px) rotate(10deg); } to { transform: translateY(4px) rotate(-10deg) scale(1.1); } }
+  @keyframes rainbow { to { background-position: 300% 0; } }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  .confetto { position: absolute; top: -4vh; font-size: 24px; pointer-events: none; animation: fall linear forwards; }
+  @keyframes fall {
+    to { transform: translateY(110vh) rotate(720deg); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🗺️ Topografie Oost-Azië</h1>
+  <span class="score" id="score">–</span>
+  <button class="btn-neutral" id="btn-restart" style="margin:0">↺ Opnieuw</button>
+</header>
+
+<div id="map"></div>
+
+<div id="panel">
+  <div id="loading">Kaart en landgrenzen laden…</div>
+
+  <div id="quizA" class="hidden">
+    <div class="question">Hoe heet <span class="target">het gemarkeerde</span> op de kaart?</div>
+    <button class="btn-primary" id="btnReveal">Toon antwoord</button>
+    <div id="revealA" class="hidden">
+      <div class="feedback" id="answerA"></div>
+      <button class="btn-good" id="btnGood">✔ Goed</button>
+      <button class="btn-bad" id="btnBad">✘ Fout</button>
+    </div>
+  </div>
+
+  <div id="quizB" class="hidden">
+    <div class="question">Wijs aan: <span class="target" id="targetB"></span></div>
+    <div class="muted" id="hintB">Klik op de kaart (in-/uitzoomen mag)</div>
+    <div id="resultB" class="hidden">
+      <div class="feedback" id="feedbackB"></div>
+      <button class="btn-primary" id="btnNextB">Volgende →</button>
+    </div>
+  </div>
+
+  <div id="done" class="hidden">
+    <div class="question" id="doneText"></div>
+    <button class="btn-primary" id="btnAgain">Nog een keer!</button>
+  </div>
+</div>
+
+<div id="start-screen">
+  <h2>🗺️ Topografie-overhoring Oost-Azië</h2>
+  <p>20 plaatsen, landen, gebieden en wateren. Kies hoe je overhoord wilt worden:</p>
+  <button class="btn-primary" id="btnModeA" style="background:#c2410c">A&nbsp;·&nbsp;Hoe heet dit? <br><small>er wordt iets gemarkeerd, jij zegt de naam</small></button>
+  <button class="btn-primary" id="btnModeB" style="background:#16a34a">B&nbsp;·&nbsp;Wijs aan <br><small>jij krijgt een naam en klikt op de kaart</small></button>
+  <div class="difficulty">
+    <span class="diff-label">Moeilijkheid (modus B):</span>
+    <div class="diff-toggle" id="diffToggle">
+      <button data-diff="1" class="active">Normaal</button>
+      <button data-diff="0.5">Moeilijk</button>
+      <button data-diff="0.1">🐊 Freek Vonk</button>
+    </div>
+  </div>
+</div>
+
+<!-- 🎉 feestmoment bij alles goed -->
+<div id="party" class="hidden">
+  <canvas id="confettiCanvas"></canvas>
+  <div class="party-inner">
+    <div class="party-title">🏆 ALLES GOED! 🏆</div>
+    <div class="party-sub">WAUW! Jij bent een echte topo-topper! 🌏</div>
+    <div class="dancers" id="dancers"></div>
+    <button class="btn-primary" id="btnParty">🎉 Joepie!</button>
+  </div>
+</div>
+
+
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+"use strict";
+
+/* ---------------- kaart ---------------- */
+const map = L.map('map', { worldCopyJump: true }).setView([35, 108], 4);
+// Fysische kaart zonder plaatsnamen (anders staan de antwoorden op de kaart!)
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 8, minZoom: 3,
+  attribution: 'Esri, US National Park Service'
+}).addTo(map);
+// dunne landgrenzen eroverheen (geen labels)
+fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+  .then(r => r.json())
+  .then(j => L.geoJSON(j, { style: { color: '#555', weight: 1, fill: false, opacity: 0.7 }, interactive: false }).addTo(map).bringToBack())
+  .catch(() => {});
+
+const highlightStyle = { color: '#c2410c', weight: 3, fillColor: '#f97316', fillOpacity: 0.45 };
+const waterStyle     = { color: '#0369a1', weight: 3, fillColor: '#38bdf8', fillOpacity: 0.40 };
+const lineStyle      = { color: '#c2410c', weight: 6, opacity: 0.9 };
+
+/* ---------------- items ---------------- */
+// type: country (geojson via internet, met fallback), city/point, line, area, water
+const ITEMS = [
+  { name: 'Seoul',                    type: 'city',  ll: [37.5665, 126.9780] },
+  { name: 'Chang Jiang (rivier)',     type: 'line',  path: [[33.2,90.8],[31.1,96.8],[28.6,98.9],[26.6,99.9],[26.9,101.6],[28.8,104.6],[29.56,106.55],[30.0,108.4],[30.5,111.3],[30.6,114.3],[29.7,116.2],[30.6,117.8],[32.06,118.8],[31.9,120.5],[31.4,121.9]] },
+  { name: 'Japan',                    type: 'country', code: 'JPN' },
+  { name: 'Hongkong',                 type: 'city',  ll: [22.3193, 114.1694] },
+  { name: 'Taiwan',                   type: 'country', code: 'TWN' },
+  { name: 'Mount Everest',            type: 'point', ll: [27.9881, 86.9250] },
+  { name: 'Noord-Korea',              type: 'country', code: 'PRK' },
+  { name: 'Kazachstan',               type: 'country', code: 'KAZ' },
+  { name: 'Osaka',                    type: 'city',  ll: [34.6937, 135.5023] },
+  { name: 'Himalaya',                 type: 'area',  poly: [[35.8,74.5],[34.0,78.0],[32.5,81.0],[31.0,84.0],[29.8,88.0],[29.3,92.0],[29.5,95.0],[28.8,97.0],[27.3,96.5],[27.3,92.0],[27.0,88.0],[28.1,84.0],[29.2,80.0],[31.3,77.0],[34.3,73.8]] },
+  { name: 'China',                    type: 'country', code: 'CHN' },
+  { name: 'Grote (Stille) Oceaan',    type: 'water', poly: [[55,165],[52,158],[45,150],[40,145],[36,141.8],[33,140.5],[28,135],[24,124],[20,122.5],[10,127],[0,135],[-5,178],[55,178]] },
+  { name: 'Shanghai',                 type: 'city',  ll: [31.2304, 121.4737] },
+  { name: 'Zuid-Korea',               type: 'country', code: 'KOR' },
+  { name: 'Japanse Zee',              type: 'water', poly: [[34.9,129.3],[36.0,129.6],[38.0,128.7],[40.0,128.4],[42.2,130.8],[43.2,132.2],[46.0,137.5],[49.0,140.2],[51.3,141.2],[45.3,141.2],[43.2,140.2],[40.0,139.6],[38.0,138.6],[36.5,136.0],[35.5,133.0],[34.7,130.8]] },
+  { name: 'Mongolië',                 type: 'country', code: 'MNG' },
+  { name: 'Beijing',                  type: 'city',  ll: [39.9042, 116.4074] },
+  { name: 'Tibet',                    type: 'area',  poly: [[36.0,79.0],[35.5,84.0],[34.5,89.0],[33.5,92.0],[32.5,95.0],[29.8,98.5],[28.5,97.0],[28.0,94.0],[27.9,91.0],[28.4,86.0],[30.1,81.2],[32.5,78.8],[34.0,78.3],[35.2,78.3]] },
+  { name: 'Tokyo',                    type: 'city',  ll: [35.6762, 139.6503] },
+  { name: 'Taipei',                   type: 'city',  ll: [25.0330, 121.5654] },
+];
+
+// grove fallback-polygonen als landgrenzen niet geladen kunnen worden (offline)
+const FALLBACK = {
+  JPN: [[45.5,141.5],[43.5,145.8],[42.8,143.5],[41.2,141.4],[38.2,141.6],[35.6,140.9],[34.6,139.0],[33.4,135.8],[31.0,131.2],[31.3,130.2],[33.3,129.5],[34.3,131.0],[35.6,133.0],[37.4,137.0],[40.0,139.9],[43.2,140.4],[45.4,140.8]],
+  TWN: [[25.3,121.6],[24.5,121.9],[22.5,121.0],[21.9,120.7],[23.1,120.0],[24.6,120.9],[25.1,121.2]],
+  PRK: [[43.0,130.6],[42.3,130.7],[41.0,129.7],[39.7,127.5],[38.6,128.4],[38.3,127.0],[37.7,126.2],[38.1,125.0],[39.5,125.4],[39.9,124.4],[41.5,126.9],[41.4,128.2],[42.5,129.7]],
+  KOR: [[38.3,127.0],[38.6,128.4],[37.5,129.4],[36.0,129.6],[35.1,129.2],[34.3,126.5],[35.5,126.3],[37.0,126.5],[37.7,126.2]],
+  KAZ: [[55.0,61.0],[54.0,65.0],[55.3,69.0],[54.2,76.0],[50.5,80.5],[48.0,85.5],[47.0,83.0],[43.2,80.5],[42.2,70.0],[41.5,66.0],[43.5,61.0],[44.0,58.0],[42.0,54.5],[44.5,50.5],[46.5,49.0],[48.3,46.8],[50.0,52.0],[51.2,55.5],[53.2,56.0],[54.2,58.5]],
+  MNG: [[50.2,92.0],[49.0,98.0],[50.2,102.0],[49.5,106.0],[48.0,110.0],[47.0,115.0],[46.5,119.5],[45.0,116.5],[43.2,111.5],[42.2,105.0],[43.5,101.0],[43.2,96.0],[45.2,91.0],[48.0,88.0],[49.6,89.5]],
+  CHN: [[49.0,87.0],[45.2,91.0],[43.2,96.0],[42.2,105.0],[43.2,111.5],[46.5,119.5],[49.5,117.5],[53.3,121.5],[53.0,126.0],[48.3,134.7],[45.0,133.0],[43.0,131.3],[42.3,130.7],[43.0,130.6],[42.5,129.7],[41.4,128.2],[41.5,126.9],[39.9,124.4],[39.8,121.0],[38.0,118.0],[37.3,122.5],[34.5,119.8],[31.4,121.9],[28.0,121.5],[24.5,118.5],[22.2,114.0],[21.5,109.5],[21.0,107.5],[23.0,102.0],[24.0,97.6],[28.3,97.3],[28.0,94.0],[27.9,91.0],[28.4,86.0],[30.1,81.2],[32.5,78.8],[35.5,77.5],[37.0,75.0],[40.0,73.8],[42.2,80.5],[45.2,82.5],[47.3,85.5]],
+};
+
+/* ---------------- landgrenzen laden ---------------- */
+const geo = {}; // code -> GeoJSON geometry
+async function loadCountries() {
+  const codes = [...new Set(ITEMS.filter(i => i.type === 'country').map(i => i.code))];
+  await Promise.all(codes.map(async code => {
+    try {
+      const r = await fetch(`https://raw.githubusercontent.com/johan/world.geo.json/master/countries/${code}.geo.json`);
+      if (!r.ok) throw new Error(r.status);
+      const j = await r.json();
+      geo[code] = j.features[0].geometry;
+    } catch (e) {
+      geo[code] = { type: 'Polygon', coordinates: [FALLBACK[code].map(([la,lo]) => [lo,la])] };
+    }
+  }));
+}
+
+/* ---------------- geometrie-hulpjes ---------------- */
+function pointInRing(lat, lng, ring) { // ring = [[lng,lat],...]
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function pointInGeometry(lat, lng, g) {
+  const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+  return polys.some(p => pointInRing(lat, lng, p[0]) && !p.slice(1).some(h => pointInRing(lat, lng, h)));
+}
+function distKm(a, b) { return map.distance(a, b) / 1000; }
+function minDistToPathKm(ll, path) {
+  let best = Infinity;
+  for (let i = 0; i < path.length - 1; i++) {
+    // sample segment
+    for (let t = 0; t <= 1; t += 0.2) {
+      const p = [path[i][0] + t * (path[i+1][0] - path[i][0]), path[i][1] + t * (path[i+1][1] - path[i][1])];
+      best = Math.min(best, distKm(ll, p));
+    }
+  }
+  return best;
+}
+function geomVertexDistKm(ll, g) {
+  let best = Infinity;
+  const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+  polys.forEach(p => p[0].forEach(([lo,la]) => { best = Math.min(best, distKm(ll, [la, lo])); }));
+  return best;
+}
+
+/* ---------------- tekenen ---------------- */
+let layerGroup = L.layerGroup().addTo(map);
+function clearLayers() { layerGroup.clearLayers(); }
+
+function drawItem(item, withLabel) {
+  let layer;
+  if (item.type === 'country') {
+    layer = L.geoJSON({ type: 'Feature', geometry: geo[item.code] }, { style: highlightStyle });
+  } else if (item.type === 'area') {
+    layer = L.polygon(item.poly, highlightStyle);
+  } else if (item.type === 'water') {
+    layer = L.polygon(item.poly, waterStyle);
+  } else if (item.type === 'line') {
+    layer = L.polyline(item.path, lineStyle);
+  } else { // city / point
+    layer = L.circleMarker(item.ll, { radius: 10, color: '#c2410c', weight: 3, fillColor: '#f97316', fillOpacity: 0.9 });
+  }
+  layer.addTo(layerGroup);
+  if (withLabel) {
+    const center = layer.getBounds ? layer.getBounds().getCenter() : L.latLng(item.ll);
+    layer.bindTooltip(item.name, { permanent: true, direction: 'top', className: 'item-label' }).openTooltip(center);
+  }
+  return layer;
+}
+
+function focusItem(item) {
+  if (item.type === 'city' || item.type === 'point') {
+    map.flyTo(item.ll, 6, { duration: 0.8 });
+  } else {
+    const l = drawnBoundsHelper(item);
+    map.flyToBounds(l.pad(0.6), { duration: 0.8, maxZoom: 6 });
+  }
+}
+function drawnBoundsHelper(item) {
+  if (item.type === 'country') return L.geoJSON({ type:'Feature', geometry: geo[item.code] }).getBounds();
+  if (item.type === 'line') return L.polyline(item.path).getBounds();
+  return L.polygon(item.poly).getBounds();
+}
+
+/* ---------------- controle (modus B) ---------------- */
+let diffFactor = 1; // 1 = Normaal, 0.5 = Moeilijk, 0.1 = Freek Vonk
+function checkClick(ll, item) {
+  const lat = ll.lat, lng = ll.lng;
+  if (item.type === 'city' || item.type === 'point') {
+    const d = distKm([lat, lng], item.ll);
+    return { ok: d <= 250 * diffFactor, dist: d };
+  }
+  if (item.type === 'line') {
+    const d = minDistToPathKm([lat, lng], item.path);
+    return { ok: d <= 150 * diffFactor, dist: d };
+  }
+  if (item.type === 'country') {
+    const g = geo[item.code];
+    if (pointInGeometry(lat, lng, g)) return { ok: true, dist: 0 };
+    const d = geomVertexDistKm([lat, lng], g);
+    return { ok: d <= 60 * diffFactor, dist: d };
+  }
+  // area / water
+  const ring = item.poly.map(([la,lo]) => [lo,la]);
+  if (pointInRing(lat, lng, ring)) return { ok: true, dist: 0 };
+  let d = Infinity;
+  item.poly.forEach(p => { d = Math.min(d, distKm([lat,lng], p)); });
+  return { ok: d <= 150 * diffFactor, dist: d };
+}
+
+/* ---------------- quiz-logica ---------------- */
+const $ = id => document.getElementById(id);
+let mode = null, queue = [], current = null, good = 0, done = 0, total = 0, awaitingClick = false;
+
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function updateScore() { $('score').textContent = `Score: ${good} / ${done}  ·  nog ${total - done} te gaan`; }
+
+function startRound(m) {
+  mode = m;
+  queue = shuffle([...ITEMS]);
+  good = 0; done = 0; total = queue.length; current = null;
+  $('start-screen').classList.add('hidden');
+  $('done').classList.add('hidden');
+  $('loading').classList.add('hidden');
+  nextQuestion();
+}
+
+function nextQuestion() {
+  clearLayers();
+  awaitingClick = false;
+  if (!queue.length) return finish();
+  current = queue.shift();
+  updateScore();
+  if (mode === 'A') {
+    $('quizB').classList.add('hidden');
+    $('quizA').classList.remove('hidden');
+    $('revealA').classList.add('hidden');
+    $('btnReveal').classList.remove('hidden');
+    drawItem(current, false);
+    focusItem(current);
+  } else {
+    $('quizA').classList.add('hidden');
+    $('quizB').classList.remove('hidden');
+    $('resultB').classList.add('hidden');
+    $('hintB').classList.remove('hidden');
+    $('targetB').textContent = current.name;
+    map.flyTo([35, 108], 4, { duration: 0.6 });
+    awaitingClick = true;
+  }
+}
+
+function finish() {
+  current = null;
+  $('quizA').classList.add('hidden');
+  $('quizB').classList.add('hidden');
+  $('done').classList.remove('hidden');
+  clearLayers();
+  const pct = Math.round(100 * good / total);
+  let emoji = pct === 100 ? '🏆' : pct >= 80 ? '🎉' : pct >= 60 ? '👍' : '💪 Nog even oefenen!';
+  $('doneText').textContent = `Klaar! ${good} van de ${total} goed (${pct}%) ${emoji}`;
+  updateScore();
+  if (good === total && total > 0) startParty();
+}
+
+/* ---------------- 🎉 feestmoment ---------------- */
+const DANCER_EMOJI = ['🕺','🦄','💃','🐼','🪩','🐸','🎸','🦖','🌟','🐨','🎺','🐵'];
+const RAIN_EMOJI = ['🎉','⭐','🎈','✨','🍬','🌈','🎊','💖','🍭'];
+const CONF_COLORS = ['#f472b6','#facc15','#4ade80','#38bdf8','#a78bfa','#fb923c','#f87171'];
+let partyTimers = [], confettiAnim = null;
+
+function startParty() {
+  const party = $('party');
+  party.classList.remove('hidden');
+  const d = $('dancers');
+  d.innerHTML = '';
+  DANCER_EMOJI.forEach((e, i) => {
+    const s = document.createElement('span');
+    s.textContent = e;
+    s.style.animationDelay = (i * 0.09) + 's';
+    d.appendChild(s);
+  });
+  startConfettiCanvas();
+  // emoji-regen
+  const rain = () => {
+    for (let i = 0; i < 6; i++) {
+      const s = document.createElement('span');
+      s.className = 'confetto';
+      s.textContent = RAIN_EMOJI[Math.floor(Math.random() * RAIN_EMOJI.length)];
+      s.style.left = Math.random() * 100 + 'vw';
+      s.style.fontSize = (18 + Math.random() * 26) + 'px';
+      s.style.animationDuration = (2.5 + Math.random() * 3) + 's';
+      party.appendChild(s);
+      setTimeout(() => s.remove(), 6000);
+    }
+  };
+  rain();
+  partyTimers.push(setInterval(rain, 450));
+}
+
+function startConfettiCanvas() {
+  const cv = $('confettiCanvas'), ctx = cv.getContext('2d');
+  cv.width = innerWidth; cv.height = innerHeight;
+  let parts = [];
+  const spawn = (n, burst) => {
+    for (let i = 0; i < n; i++) {
+      const fromLeft = Math.random() < 0.5;
+      parts.push(burst ? {
+        // kanonnen vanuit de onderhoeken
+        x: fromLeft ? 0 : cv.width, y: cv.height,
+        vx: (fromLeft ? 1 : -1) * (3 + Math.random() * 7), vy: -(8 + Math.random() * 9),
+        w: 6 + Math.random() * 7, h: 10 + Math.random() * 6,
+        r: Math.random() * Math.PI, vr: (Math.random() - .5) * .3,
+        c: CONF_COLORS[Math.floor(Math.random() * CONF_COLORS.length)]
+      } : {
+        // regen vanaf boven
+        x: Math.random() * cv.width, y: -20,
+        vx: (Math.random() - .5) * 2, vy: 2 + Math.random() * 3,
+        w: 6 + Math.random() * 7, h: 10 + Math.random() * 6,
+        r: Math.random() * Math.PI, vr: (Math.random() - .5) * .3,
+        c: CONF_COLORS[Math.floor(Math.random() * CONF_COLORS.length)]
+      });
+    }
+  };
+  spawn(180, true);
+  partyTimers.push(setInterval(() => spawn(25, false), 400));
+  partyTimers.push(setInterval(() => spawn(60, true), 2600));
+  const tick = () => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    parts = parts.filter(p => p.y < cv.height + 30);
+    parts.forEach(p => {
+      p.vy += 0.12; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    });
+    confettiAnim = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+function stopParty() {
+  partyTimers.forEach(clearInterval); partyTimers = [];
+  if (confettiAnim) cancelAnimationFrame(confettiAnim);
+  confettiAnim = null;
+  $('party').classList.add('hidden');
+  $('party').querySelectorAll('.confetto').forEach(s => s.remove());
+}
+$('btnParty').onclick = stopParty;
+
+/* modus A */
+$('btnReveal').onclick = () => {
+  $('answerA').textContent = current.name;
+  $('revealA').classList.remove('hidden');
+  $('btnReveal').classList.add('hidden');
+};
+$('btnGood').onclick = () => { good++; done++; nextQuestion(); };
+$('btnBad').onclick  = () => { done++; nextQuestion(); };
+
+/* modus B */
+map.on('click', e => {
+  if (mode !== 'B' || !awaitingClick || !current) return;
+  awaitingClick = false;
+  const res = checkClick(e.latlng, current);
+  done++; if (res.ok) good++;
+  // toon klik + juiste locatie
+  L.circleMarker(e.latlng, { radius: 7, color: res.ok ? '#16a34a' : '#dc2626', fillColor: res.ok ? '#16a34a' : '#dc2626', fillOpacity: 0.9 }).addTo(layerGroup);
+  drawItem(current, true);
+  const fb = $('feedbackB');
+  if (res.ok) {
+    fb.textContent = res.dist >= 1 ? `✔ Goed! (je zat er ±${Math.round(res.dist)} km naast)` : '✔ Goed!';
+    fb.className = 'feedback good';
+  } else {
+    fb.textContent = `✘ Helaas — dit is de juiste plek (je zat er ±${Math.round(res.dist)} km naast)`;
+    fb.className = 'feedback bad';
+  }
+  $('hintB').classList.add('hidden');
+  $('resultB').classList.remove('hidden');
+  updateScore();
+});
+$('btnNextB').onclick = nextQuestion;
+
+/* overig */
+$('btnAgain').onclick = () => { $('start-screen').classList.remove('hidden'); };
+$('btn-restart').onclick = () => { clearLayers(); $('quizA').classList.add('hidden'); $('quizB').classList.add('hidden'); $('done').classList.add('hidden'); $('start-screen').classList.remove('hidden'); };
+
+/* start */
+let ready = false;
+loadCountries().then(() => {
+  ready = true;
+  $('loading').textContent = 'Kies een modus om te beginnen ⬆';
+});
+$('btnModeA').onclick = () => ready && startRound('A');
+$('btnModeB').onclick = () => ready && startRound('B');
+document.querySelectorAll('#diffToggle button').forEach(btn => {
+  btn.onclick = () => {
+    diffFactor = parseFloat(btn.dataset.diff);
+    document.querySelectorAll('#diffToggle button').forEach(b => b.classList.toggle('active', b === btn));
+  };
+});
+</script>
+<style>
+  .item-label { font-weight: 700; font-size: 14px; color: #1e3a5f; }
+</style>
+</body>
+</html>
